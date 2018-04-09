@@ -1,0 +1,261 @@
+---
+title: "spatstat package"
+author: "Pei-Rou Lin"
+date: "2018年2月26日"
+output: 
+  html_document:
+    toc: true
+    toc_float:
+      collapsed: true
+      smooth_scroll:  true    
+---
+## spatstat 套件簡介
+
+- 功能 : 一個處理空間分析的套件，主要分析**空間點模式(spatial point patterns)**
+
+- 資料 : 含有點的位置資料，此外可以包含額外資訊(marks)。
+  
+    - 適用:
+    
+          例如:犯罪地點、便利商店位置等
+
+    - 不適用 : 
+    
+          相同位置含有不同特性，例如:紀錄每個地方的溫度資料
+    
+          不同位置代表同一個東西在不同的時間，例如:每個小時記錄某個鯊魚的位置
+  
+- 功能:
+
+    - 生成點模式(point pattern)
+
+    - EDA
+
+    - 分析方法
+  
+          樣方分析、核密度估計、判斷是否為完全隨機分布(CRS):G函數F函數等
+
+### spatstat 的基本物件
+
+- ppp:平面上的點(planar point pattern)
+
+- owin:視窗(spatial region (‘observation window’))
+
+- im :畫素影像(pixel image) 
+
+- psp:線段 pattern of line segments
+
+- tess:鑲嵌tessellation
+
+```{r result="hide"}
+library(spatstat)
+#data(package="spatstat.data") 
+#可以查看內建的資料集
+```
+
+- example:spatstat內建資料集bei
+
+```{r}
+bei #Tropical rain forest trees
+class(bei)
+plot(bei)
+class(bei$window)
+plot(bei$window)
+class(density(bei))
+plot(density(bei))
+ants #紀錄螞蟻巢穴的位置;marks:螞蟻種類Cataglyphis, Messor
+marks(ants)
+plot(ants) 
+plot(split(ants)) #以marks畫
+```
+
+### 生成owin物件
+`owin(xrange,yrange,poly,mask)`
+
+```{r}
+plot(owin(c(10,20), c(10,30))) #矩形
+
+plot(owin(poly=list(x=c(0.5,1,0.5,0),y=c(0,1,2,1))),main="菱形") #菱形
+
+plot(owin(poly=list(list(x=c(0,1,1,0), y=c(0,0,1,1)),
+                        mask=list(x=c(0.6,0.4,0.4,0.6), y=c(0.2,0.2,0.4,0.4)))),main="")#中間有洞
+```
+
+####由shapfile檔轉owin
+
+#### example:台北市區界資料
+
+```{r}
+library(maptools)
+S <- readShapePoly("C:\\Users\\ASUS\\Desktop\\google drive\\workshop\\碩一上\\711設店相關\\data\\1040826_區界\\G97_A_CADIST_P.shp")##S為SpatialPolygonsDataFrame物件
+#轉換經緯度 : TWD97(EPSG:3826) -> WGS84(EPSG:4326)
+library(rgdal)
+proj4string(S) <- CRS("+init=EPSG:3826") 
+S1 <- spTransform(S, CRS("+init=EPSG:4326")) 
+W <- as(S1, "owin")#轉成owin
+W
+plot(W)
+```
+
+### 生成ppp物件
+
+- 需要有**點的位置**和**觀察的範圍** ，如果有額外資訊則記錄在`marks`中
+
+- 觀察的範圍 : 
+
+    矩形則`ppp(x, y, xrange, yrange, marks=m)`
+    
+    非矩形則`ppp(x, y, window = W, marks=m)`
+```{r}
+library(maptools)
+P<- read.csv("C:\\Users\\ASUS\\Desktop\\google drive\\workshop\\碩一上\\711設店相關\\data\\store.csv")
+P1<-ppp(x=P$lon,y=P$lat,W)
+plot(P1)
+```
+
+### 生成psp物件
+
+`psp(x0,y0, x1, y1, window, marks=NULL)`
+```{r}
+X <- psp(runif(10), runif(10), runif(10), runif(10), window=owin())
+plot(X)
+m <- data.frame(A=1:10, B=letters[1:10])
+X <- psp(runif(10), runif(10), runif(10), runif(10), window=owin(), marks=m)
+plot(X)
+```
+
+---
+
+## 分析點模式
+
+- 空間型態
+
+- 樣方分析
+
+- 核密度估計
+
+- G函數
+
+- Ripley’s K-function
+
+###空間型態 : 是否為**聚集**、**均勻**、**隨機分布**
+
+例子 : 
+
+  左為紅衫樹、中為日本黑松、右為細胞中心
+  
+  可看出紅衫樹有聚集現象，細胞為均勻分布，而日本黑松可能為隨機分布。
+```{r}
+par(mfrow=c(1,3))
+plot(redwood)
+plot(japanesepines)
+plot(cells)
+
+summary(cells)
+```
+
+
+### 樣方分析和核密度估計示意圖
+
+![](http://html.rhhz.net/WHDXXBXXKXB/html/PIC/20160213-1.jpg "樣方分析和核密度估計比較")
+
+
+### 樣方分析(quadrat analysis)
+`quadratcount(ppp,nx,ny)`:基於**密度**，在圖上分隔數個大小相同的方格，計算每個格子內所包含的點數量。 
+
+`quadrat.test(ppp)`:利用卡方檢定是否為**隨機分布**
+
+
+#### example:spatstat的資料集(bei)
+
+```{r}
+quadratcount(bei)
+quadratcount(bei,3,3)
+plot(bei,cex=0.5)
+plot(quadratcount(bei),add=TRUE,col="red")
+#Ho:點為隨機分布
+plot(bei,cex=0.5)
+plot(quadrat.test(bei),add=TRUE,col="red") #左上:觀察值、右上:期望值、下方:差值
+quadrat.test(bei)#p-value 很小，拒絕 Ho
+```
+
+
+#### example:台北市711分布
+
+```{r}
+quadratcount(P1)
+plot(P1,cex=0.5)
+plot(quadratcount(P1),add=TRUE,col="red")
+#Ho:點為隨機分布
+plot(P1,cex=0.5)
+plot(quadrat.test(P1),add=TRUE,col="red") #左上:觀察值、右上:期望值、下方:差值
+quadrat.test(P1) #p-value 很小，拒絕 Ho
+```
+
+
+### 核密度估計(kernel density estimation, KDE)
+概念:每處都有密度值，不是只有事件點的地方有密度。可以將離散點資料轉為有群聚趨勢的連續表面。
+
+方法:在圖上畫上均勻方格，以其中一個網格為中心，選定一個半徑，計算涵蓋圓內的密度，累加密度，重複直到所有網格都計算過。
+
+問題:帶寬的選擇
+
+`density(x,sigma)`
+
+
+#### example:spatstat的資料集(bei)
+
+```{r}
+density(bei)
+par(mfrow=c(1,3))
+plot(density(bei,sigma = 10))
+plot(density(bei))
+plot(density(bei,sigma = 200))
+```
+```{r}
+contour(density(bei))
+```
+
+
+#### example:台北市711分布
+
+```{r}
+density(P1)
+par(mfrow=c(1,2))
+plot(P1)
+plot(density(P1))
+
+```
+
+
+### G函數
+`Gest()`基於**距離**計算最鄰近距離的累積函數，分辨是否為完全隨機分布(Complete Spatial Randomness, CSR)
+
+
+#### example:spatstat的資料集(cells,japanesepines,redwood)
+```{r}
+#藍線為poisson,
+par(mfrow=c(1,3))
+plot(Gest(cells)) #G函數緩慢上升，則為均勻分布
+plot(Gest(japanesepines))#和藍線重疊，則為隨機分布
+plot(Gest(redwood))#G函數快速上升，則為聚集分布
+
+```
+
+
+#### example:台北市711分布
+```{r}
+plot(Gest(P1)) #台北市711分布為聚集分布
+```
+
+
+----
+
+## reference
+
+- [Spatstat Quick Reference guide](http://spatstat.org/resources/spatstatQuickref.pdf "可以快速需要的指令")
+
+- [Package 'spatstat'](http://spatstat.org/resources/spatstatManual.pdf "1546頁")
+
+- [Analysing spatial point patterns in R](https://research.csiro.au/software/wp-content/uploads/sites/6/2015/02/Rspatialcourse_CMIS_PDF-Standard.pdf)
+
